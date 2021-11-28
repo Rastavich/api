@@ -14,6 +14,7 @@ import (
 var db *sql.DB
 
 type Company struct {
+	Id          int
 	Account     string
 	Sys         string
 	Username    string
@@ -37,19 +38,16 @@ func main() {
 	defer db.Close()
 	http.HandleFunc("/api/getAllCompanies", GETAllCompanies)
 	http.HandleFunc("/api/getCompanyByName/", GETCompanyByName)
+	http.HandleFunc("/api/updateField/", UPDATEfield)
 	log.Fatal(http.ListenAndServe("localhost:8000", nil))
 }
 
 func GETAllCompanies(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	offset := r.URL.Query().Get("offset")
 
 	rows, err := db.Query(`
             SELECT * 
-            FROM public."data"
-			LIMIT 20
-			OFFSET $1
-            `, offset)
+            FROM public."data" `)
 
 	if err != nil {
 		panic(err)
@@ -59,7 +57,7 @@ func GETAllCompanies(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var client Company
-		rows.Scan(&client.Account, &client.Sys, &client.Username,
+		rows.Scan(&client.Id, &client.Account, &client.Sys, &client.Username,
 			&client.Pword, &client.Description, &client.Address,
 			&client.Grouping, &client.Notes)
 		company = append(company, client)
@@ -91,7 +89,7 @@ func GETCompanyByName(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 
 		var client Company
-		if err := rows.Scan(&client.Account, &client.Sys, &client.Username,
+		if err := rows.Scan(&client.Id, &client.Account, &client.Sys, &client.Username,
 			&client.Pword, &client.Description, &client.Address,
 			&client.Grouping, &client.Notes); err != nil {
 
@@ -107,6 +105,28 @@ func GETCompanyByName(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(companyBytes)
 
+}
+
+func UPDATEfield(w http.ResponseWriter, r *http.Request) {
+	// update a field in the database
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	id := r.URL.Query().Get("id")
+	field := r.URL.Query().Get("field")
+	value := r.URL.Query().Get("value")
+
+	_, err := db.Exec(`
+		UPDATE public."data"	
+		SET $1 = $2
+		WHERE account = $3
+		`, field, value, id)
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Successfully updated!")
+
+	defer db.Close()
 }
 
 func initDb() {
