@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -14,15 +15,17 @@ import (
 var db *sql.DB
 
 type Company struct {
-	Id          int
-	Account     string
-	Sys         string
-	Username    string
-	Pword       string
-	Description string
-	Address     string
-	Grouping    string
-	Notes       string
+	Id             int
+	Account        string
+	Sys            string
+	Username       string
+	Pword          string
+	Description    string
+	Address        string
+	Grouping       string
+	Notes          string
+	Aka            string
+	Account_status string
 }
 
 const (
@@ -39,6 +42,7 @@ func main() {
 	http.HandleFunc("/api/getAllCompanies", GETAllCompanies)
 	http.HandleFunc("/api/getCompanyByName/", GETCompanyByName)
 	http.HandleFunc("/api/updateField/", UPDATEfield)
+	http.HandleFunc("/api/deleteCompanyRowById/", DELETECompanyRowById)
 	log.Fatal(http.ListenAndServe("localhost:8000", nil))
 }
 
@@ -46,8 +50,10 @@ func GETAllCompanies(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	rows, err := db.Query(`
-            SELECT * 
-            FROM public."data" `)
+            SELECT
+			id, account, sys, username, pword, description, 
+			address, "grouping", notes, aka, account_status
+            FROM "Companies".companies `)
 
 	if err != nil {
 		panic(err)
@@ -59,7 +65,7 @@ func GETAllCompanies(w http.ResponseWriter, r *http.Request) {
 		var client Company
 		rows.Scan(&client.Id, &client.Account, &client.Sys, &client.Username,
 			&client.Pword, &client.Description, &client.Address,
-			&client.Grouping, &client.Notes)
+			&client.Grouping, &client.Notes, &client.Aka, &client.Account_status)
 		company = append(company, client)
 	}
 
@@ -76,7 +82,11 @@ func GETCompanyByName(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	account := r.URL.Query().Get("account")
-	rows, err := db.Query("SELECT * FROM public.\"data\"")
+	aka := r.URL.Query().Get("aka")
+	rows, err := db.Query(`SELECT 
+		id, account, sys, username, pword, description, 
+		address, "grouping", notes, aka, account_status
+		FROM "Companies".companies`)
 
 	if err != nil {
 		panic(err)
@@ -91,10 +101,18 @@ func GETCompanyByName(w http.ResponseWriter, r *http.Request) {
 		var client Company
 		if err := rows.Scan(&client.Id, &client.Account, &client.Sys, &client.Username,
 			&client.Pword, &client.Description, &client.Address,
-			&client.Grouping, &client.Notes); err != nil {
+			&client.Grouping, &client.Notes, &client.Aka, &client.Account_status); err != nil {
 
-			if strings.Contains(strings.ToLower(client.Account), strings.ToLower(account)) {
-				company = append(company, client)
+			if client.Account != "" {
+				if strings.Contains(strings.ToLower(client.Account), strings.ToLower(account)) {
+					company = append(company, client)
+				}
+			}
+
+			if client.Aka != "" {
+				if strings.Contains(strings.ToLower(client.Aka), strings.ToLower(aka)) {
+					company = append(company, client)
+				}
 			}
 
 		}
@@ -110,23 +128,44 @@ func GETCompanyByName(w http.ResponseWriter, r *http.Request) {
 func UPDATEfield(w http.ResponseWriter, r *http.Request) {
 	// update a field in the database
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	id := r.URL.Query().Get("id")
-	field := r.URL.Query().Get("field")
+
+	id, error := strconv.Atoi(r.URL.Query().Get("id"))
 	value := r.URL.Query().Get("value")
 
-	_, err := db.Exec(`
-		UPDATE public."data"	
-		SET $1 = $2
-		WHERE account = $3
-		`, field, value, id)
+	fmt.Println(id)
+	fmt.Println(value)
 
-	if err != nil {
+	_, err := db.Exec(`
+		UPDATE "Companies".companies	
+		SET account=$2
+		WHERE id=$1
+		`, id, value)
+
+	if err != nil || error != nil {
 		panic(err)
 	}
 
 	fmt.Println("Successfully updated!")
 
-	defer db.Close()
+}
+
+func DELETECompanyRowById(w http.ResponseWriter, r *http.Request) {
+	// update a field in the database
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	id, error := strconv.Atoi(r.URL.Query().Get("id"))
+
+	fmt.Println(id)
+	_, err := db.Exec(`
+		DELETE FROM "Companies".companies	
+		WHERE id = $1
+		`, id)
+
+	if err != nil || error != nil {
+		panic(err)
+	}
+
+	fmt.Println("Successfully Deleted!")
+
 }
 
 func initDb() {
